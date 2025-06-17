@@ -33,6 +33,15 @@ class Matrix:
     def clear_square(self, row, column):
         self.labels[row][column].configure(text="")
 
+    def paint_square_perfect(self, row, column):
+        self.labels[row][column].configure(bg=config.GREEN)
+
+    def paint_square_good(self, row, column):
+        self.labels[row][column].configure(bg=config.YELLOW)
+
+    def paint_square_bad(self, row, column):
+        self.labels[row][column].configure(bg=config.GREY_USED)
+
     def shake_row(self, row):
         def animate_shake(step=0):
             if step < 6:

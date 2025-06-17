@@ -13,7 +13,7 @@ class GameScreen:
         # falta agregar el teclado y tal vez los indicadores del ptj del otro jugador
         # ademas del tiempo
         self.word_manager = WordManager()
-
+        self.chosen_word = self.word_manager.get_word()
         # game state
         self.row = 0
         self.column = 0
@@ -38,13 +38,22 @@ class GameScreen:
             if self.column == 5:
                 # validate word
                 typed_word = "".join(self.board[self.row])
-                print("Word to guess: ", self.word_manager.get_word())
+                print("Word to guess: ", self.chosen_word)
                 print("Current word: ", typed_word)
-
+                for i in range(5):
+                    # properly placed letter
+                    if typed_word[i] == self.chosen_word[i]:
+                        self.matrix.paint_square_perfect(self.row, i)
+                    # letter in incorrect spot
+                    elif typed_word[i] in self.chosen_word:
+                        self.matrix.paint_square_good(self.row, i)
+                    else:
+                        self.matrix.paint_square_bad(self.row, i)
 
                 # continue with next row
-                if self.row < 6:
+                if self.row < 5:
                     self.row += 1
+                    self.column = 0
                 else:
                     self.finished = True
             else:
@@ -55,6 +64,8 @@ class GameScreen:
                 self.column -= 1
                 self.board[self.row][self.column] = ""
                 self.matrix.clear_square(self.row, self.column)
+
+        print("Row: ", self.row, "Column: ", self.column)
 
     def run(self):
         self.root.mainloop()
