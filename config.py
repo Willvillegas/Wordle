@@ -1,0 +1,19 @@
+# palette
+BLACK_BG = "#121213"
+GREY_USED = "#3A3A3C"
+GREY = "#818384"
+YELLOW = "#B59F3B"
+WHITE = "#F8F8F8"
+GREEN = "#538D4E"
+GREY_LINE = "#2D2D2F"
+
+# gui
+ROWS = 6
+COLUMNS = 5
+
+# game
+TIME_MIN = 10
+
+# network
+SERVER_IP = "127.0.0.1"
+SERVER_PORT = 10100
