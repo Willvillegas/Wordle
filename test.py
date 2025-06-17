@@ -9,7 +9,22 @@ class GameScreen:
         self.root.title("Wordle")
         self.root.configure(bg=config.BLACK_BG)
         self.root.resizable(False, False)
-        self.matrix = Matrix(self.root)
+        self.main_frame = tk.Frame(self.root, bg=config.BLACK_BG)
+        self.main_frame.pack(padx=20, pady=20)
+
+        self.matrix = Matrix(self.main_frame)
+        self.matrix.frame.pack(side="left", padx=(0,20))
+
+        # other player progress
+        self.opponent_frame = tk.Frame(self.main_frame, bg=config.BLACK_BG)
+        self.opponent_frame.pack(side="right")
+        self.opponent_progress = []
+        for i in range(6):
+            indicator = tk.Label(self.opponent_frame, text="", width=2, height=1,
+                        bg=config.GREY_LINE, relief="ridge", bd=2)
+            indicator.pack(pady=6)
+            self.opponent_progress.append(indicator)
+
         # falta agregar el teclado y tal vez los indicadores del ptj del otro jugador
         # ademas del tiempo
         self.word_manager = WordManager()
@@ -18,6 +33,7 @@ class GameScreen:
         self.row = 0
         self.column = 0
         self.finished = False
+        self.win = False
         self.board = [[""] * 5 for _ in range(6)]
         # capture keyboard
         self.root.bind("<Key>", self.on_key)
@@ -49,7 +65,10 @@ class GameScreen:
                         self.matrix.paint_square_good(self.row, i)
                     else:
                         self.matrix.paint_square_bad(self.row, i)
-
+                # did the player win ?
+                if typed_word == self.chosen_word:
+                    self.finished = True
+                    self.win = True
                 # continue with next row
                 if self.row < 5:
                     self.row += 1
