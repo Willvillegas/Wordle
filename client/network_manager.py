@@ -4,7 +4,7 @@ import threading
 from queue import Queue, Empty
 
 class NetworkManager:
-    def __init__(self, host='64.23.137.192', port=10100):  # IP de tu VM
+    def __init__(self, host='64.23.137.192', port=10100):
         self.host = host
         self.port = port
         self.socket = None
@@ -14,35 +14,27 @@ class NetworkManager:
         
     def connect(self):
         try:
-            print(f"🔌 Conectando a {self.host}:{self.port}...")
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            
-            # Timeout más largo para conexiones de red
             self.socket.settimeout(15)
             self.socket.connect((self.host, self.port))
             self.connected = True
             
-            print(f"✅ Conectado a {self.host}:{self.port}")
-            
-            receive_thread = threading.Thread(target=self._receive_messages, name="NetworkReceive")
+            receive_thread = threading.Thread(target=self._receive_messages)
             receive_thread.daemon = True
             receive_thread.start()
             
-            process_thread = threading.Thread(target=self._process_messages, name="NetworkProcess")
+            process_thread = threading.Thread(target=self._process_messages)
             process_thread.daemon = True
             process_thread.start()
             
             return True
             
-        except Exception as e:
-            print(f"❌ Error conectando a {self.host}:{self.port}: {e}")
+        except Exception:
             self.connected = False
             return False
     
     def _receive_messages(self):
-        print(f"📡 Iniciando recepción de mensajes...")
-        
-        buffer = ""  # Buffer para manejar mensajes parciales/concatenados
+        buffer = ""
         
         while self.connected:
             try:
@@ -50,21 +42,15 @@ class NetworkManager:
                 data = self.socket.recv(1024)
                 
                 if not data:
-                    print(f"📡 Servidor cerró la conexión")
                     break
                 
-                # Agregar datos al buffer
                 buffer += data.decode('utf-8')
                 
-                # Procesar todos los mensajes completos en el buffer
                 while '\n' in buffer or buffer.count('{') > 0:
                     try:
-                        # Buscar mensaje JSON completo
                         if '\n' in buffer:
-                            # Mensaje delimitado por newline
                             message_str, buffer = buffer.split('\n', 1)
                         else:
-                            # Intentar parsear JSON desde el inicio del buffer
                             decoder = json.JSONDecoder()
                             message, idx = decoder.raw_decode(buffer)
                             message_str = buffer[:idx]
@@ -73,101 +59,68 @@ class NetworkManager:
                         if message_str.strip():
                             try:
                                 message = json.loads(message_str.strip())
-                                print(f"📨 Recibido: {message.get('type')}")
                                 self.message_queue.put(message)
-                            except json.JSONDecodeError as e:
-                                print(f"⚠️ Error JSON: {e} - Datos: {message_str[:100]}")
+                            except json.JSONDecodeError:
                                 break
                         else:
                             break
                             
                     except (json.JSONDecodeError, ValueError):
-                        # Si no podemos parsear, esperar más datos
                         break
                     
             except socket.timeout:
                 continue
-            except Exception as e:
-                print(f"❌ Error recibiendo: {e}")
+            except Exception:
                 break
         
-        print(f"📡 Recepción terminada")
         self.connected = False
     
     def _process_messages(self):
-        print(f"⚙️ Iniciando procesamiento...")
-        
         while self.connected:
             try:
                 message = self.message_queue.get(timeout=1)
                 msg_type = message.get('type')
                 
-                print(f"⚙️ Procesando: {msg_type}")
-                
                 if msg_type in self.callbacks:
-                    try:
-                        self.callbacks[msg_type](message)
-                    except Exception as e:
-                        print(f"❌ Error en callback {msg_type}: {e}")
-                else:
-                    print(f"⚠️ No hay callback para: {msg_type}")
+                    self.callbacks[msg_type](message)
                     
             except Empty:
                 continue
-            except Exception as e:
-                print(f"❌ Error procesando: {e}")
-        
-        print(f"⚙️ Procesamiento terminado")
+            except Exception:
+                pass
     
     def send_attempt(self, word):
         if self.connected:
             message = {'type': 'attempt', 'word': word}
-            print(f"📤 Enviando intento: {word}")
             return self._send_message(message)
-        else:
-            print(f"⚠️ No conectado")
-            return False
+        return False
     
     def send_new_game_response(self, answer):
         if self.connected:
             message = {'type': 'new_game_response', 'answer': answer}
-            print(f"📤 Enviando respuesta: {answer}")
             return self._send_message(message)
-        else:
-            return False
+        return False
     
     def _send_message(self, message):
         try:
             if not self.connected:
                 return False
                 
-            # Agregar delimitador newline
             data = json.dumps(message).encode('utf-8') + b'\n'
             self.socket.send(data)
             return True
             
-        except Exception as e:
-            print(f"❌ Error enviando: {e}")
+        except Exception:
             self.connected = False
             return False
     
     def register_callback(self, message_type, callback):
         self.callbacks[message_type] = callback
-        print(f"📋 Callback registrado: {message_type}")
     
     def disconnect(self):
-        print(f"🔌 Desconectando...")
         self.connected = False
-        
         if self.socket:
             try:
                 self.socket.close()
             except:
                 pass
-        
-        print(f"✅ Desconectado")
-
-if __name__ == "__main__":
-    from server.server import WordleServer
-    server = WordleServer()
-    server.start()
