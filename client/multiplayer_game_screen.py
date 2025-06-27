@@ -15,22 +15,30 @@ class MultiplayerGameScreen:
         self.root.geometry("900x700")
         self._center_window()
         
+        # Estado de conexión
         self.network = NetworkManager()
         self.player_id = None
         self.opponent_id = None
         self.game_started = False
         
+        # UI
         self._setup_ui()
         
+        # Estado del juego local
         self.row = 0
         self.column = 0
         self.finished = False
         self.win = False
         self.board = [[""] * 5 for _ in range(6)]
         
+        # Configurar callbacks de red
+        self._setup_network_callbacks()
+        
+        # Capturar teclado
         self.root.bind("<Key>", self.on_key)
         self.root.focus_set()
         
+        # Conectar al servidor
         self._connect_to_server()
     
     def _setup_ui(self):
@@ -63,8 +71,6 @@ class MultiplayerGameScreen:
         self.root.title(f"Wordle - {message}")
     
     def _connect_to_server(self):
-        self._setup_network_callbacks()
-        
         if self.network.connect():
             self._show_connection_status("Conectado")
         else:
@@ -79,8 +85,6 @@ class MultiplayerGameScreen:
         self.network.register_callback('opponent_progress', self._on_opponent_progress)
         self.network.register_callback('game_end', self._on_game_end)
         self.network.register_callback('invalid_word', self._on_invalid_word)
-        self.network.register_callback('ask_new_game', self._on_ask_new_game)
-        self.network.register_callback('disconnect', self._on_disconnect)
     
     def _on_waiting(self, message):
         self._show_connection_status("Esperando oponente...")
@@ -107,6 +111,7 @@ class MultiplayerGameScreen:
         won = message['won']
         finished = message['finished']
         
+        # Aplicar colores
         for i in range(5):
             if result[i] == 2:
                 self.matrix.paint_square_perfect(self.row, i)
@@ -115,6 +120,7 @@ class MultiplayerGameScreen:
             else:
                 self.matrix.paint_square_bad(self.row, i)
         
+        # Actualizar teclado
         self._update_keyboard_colors(message['word'], result)
         
         if won:
@@ -160,24 +166,15 @@ class MultiplayerGameScreen:
         
         messagebox.showinfo("Juego terminado", f"{result_msg}\n\nLa palabra era: {target_word}")
         self.finished = True
-    
-    def _on_ask_new_game(self, message):
-        wants_new_game = messagebox.askyesno("Nueva partida", "¿Quieres jugar otra partida?")
         
-        self.network.send_new_game_response(wants_new_game)
-        
-        if wants_new_game:
-            self._reset_game_for_new_match()
-            self._show_connection_status("Esperando respuesta del oponente...")
+        # Preguntar si quiere jugar otra partida
+        if messagebox.askyesno("Nueva partida", "¿Quieres jugar otra partida?"):
+            self._reset_game()
+            self._connect_to_server()
+        else:
+            self.root.destroy()
     
-    def _on_disconnect(self, message):
-        messagebox.showinfo("Desconectado", message.get('message', 'Desconectado del servidor'))
-        self.root.destroy()
-    
-    def _on_invalid_word(self, message):
-        self.matrix.shake_row(self.row)
-    
-    def _reset_game_for_new_match(self):
+    def _reset_game(self):
         self.row = 0
         self.column = 0
         self.finished = False
@@ -185,17 +182,23 @@ class MultiplayerGameScreen:
         self.game_started = False
         self.board = [[""] * 5 for _ in range(6)]
         
+        # Limpiar matriz
         for r in range(6):
             for c in range(5):
                 self.matrix.clear_square(r, c)
                 self.matrix.labels[r][c].configure(bg=config.BLACK_BG)
         
+        # Limpiar teclado
         for key, button in self.keyboard.key_buttons.items():
             button.configure(bg=config.GREY_USED)
         
+        # Reset status panel
         self.status_panel.update_attempts(1, 6)
         for i in range(6):
             self.status_panel.update_opponent_progress(i, 'empty')
+    
+    def _on_invalid_word(self, message):
+        self.matrix.shake_row(self.row)
     
     def _handle_virtual_key(self, key):
         if key == 'Return':
