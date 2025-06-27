@@ -42,6 +42,8 @@ class NetworkManager:
     def _receive_messages(self):
         print(f"📡 Iniciando recepción de mensajes...")
         
+        buffer = ""  # Buffer para manejar mensajes parciales/concatenados
+        
         while self.connected:
             try:
                 self.socket.settimeout(5.0)
@@ -51,12 +53,37 @@ class NetworkManager:
                     print(f"📡 Servidor cerró la conexión")
                     break
                 
-                try:
-                    message = json.loads(data.decode('utf-8'))
-                    print(f"📨 Recibido: {message.get('type')}")
-                    self.message_queue.put(message)
-                except json.JSONDecodeError as e:
-                    print(f"⚠️ Error JSON: {e}")
+                # Agregar datos al buffer
+                buffer += data.decode('utf-8')
+                
+                # Procesar todos los mensajes completos en el buffer
+                while '\n' in buffer or buffer.count('{') > 0:
+                    try:
+                        # Buscar mensaje JSON completo
+                        if '\n' in buffer:
+                            # Mensaje delimitado por newline
+                            message_str, buffer = buffer.split('\n', 1)
+                        else:
+                            # Intentar parsear JSON desde el inicio del buffer
+                            decoder = json.JSONDecoder()
+                            message, idx = decoder.raw_decode(buffer)
+                            message_str = buffer[:idx]
+                            buffer = buffer[idx:].strip()
+                            
+                        if message_str.strip():
+                            try:
+                                message = json.loads(message_str.strip())
+                                print(f"📨 Recibido: {message.get('type')}")
+                                self.message_queue.put(message)
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️ Error JSON: {e} - Datos: {message_str[:100]}")
+                                break
+                        else:
+                            break
+                            
+                    except (json.JSONDecodeError, ValueError):
+                        # Si no podemos parsear, esperar más datos
+                        break
                     
             except socket.timeout:
                 continue
@@ -114,7 +141,8 @@ class NetworkManager:
             if not self.connected:
                 return False
                 
-            data = json.dumps(message).encode('utf-8')
+            # Agregar delimitador newline
+            data = json.dumps(message).encode('utf-8') + b'\n'
             self.socket.send(data)
             return True
             

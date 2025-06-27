@@ -1,3 +1,4 @@
+# server/network_server.py
 import socket
 import threading
 import json
@@ -276,6 +277,8 @@ class WordleServer:
         
         print(f"🎮 Manejando juego para jugador {player_id} ({client['address']})")
         
+        buffer = ""  # Buffer para mensajes del cliente
+        
         try:
             while client['connected'] and not game['finished']:
                 try:
@@ -287,22 +290,30 @@ class WordleServer:
                         print(f"📡 Cliente {player_id} cerró conexión")
                         break
                     
-                    try:
-                        message = json.loads(data.decode('utf-8'))
-                        msg_type = message.get('type')
+                    # Agregar al buffer
+                    buffer += data.decode('utf-8')
+                    
+                    # Procesar mensajes completos
+                    while '\n' in buffer:
+                        message_str, buffer = buffer.split('\n', 1)
                         
-                        print(f"📨 Jugador {player_id}: {msg_type}")
-                        
-                        if msg_type == 'attempt':
-                            word = message.get('word', '').upper()
-                            self.handle_attempt(client, game, word)
-                        elif msg_type == 'heartbeat':
-                            # Responder heartbeat
-                            self.send_message(client_socket, {'type': 'heartbeat_ack'})
-                            
-                    except json.JSONDecodeError as e:
-                        print(f"⚠️ Error JSON de jugador {player_id}: {e}")
-                        continue
+                        if message_str.strip():
+                            try:
+                                message = json.loads(message_str.strip())
+                                msg_type = message.get('type')
+                                
+                                print(f"📨 Jugador {player_id}: {msg_type}")
+                                
+                                if msg_type == 'attempt':
+                                    word = message.get('word', '').upper()
+                                    self.handle_attempt(client, game, word)
+                                elif msg_type == 'heartbeat':
+                                    # Responder heartbeat
+                                    self.send_message(client_socket, {'type': 'heartbeat_ack'})
+                                    
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️ Error JSON de jugador {player_id}: {e}")
+                                continue
                         
                 except socket.timeout:
                     # Verificar si el juego sigue activo
@@ -482,24 +493,36 @@ class WordleServer:
         self.process_new_game_responses(game, responses)
     
     def get_new_game_response(self, client, responses):
+        buffer = ""
+        
         try:
             client['socket'].settimeout(30)
-            data = client['socket'].recv(1024)
             
-            if data:
-                message = json.loads(data.decode('utf-8'))
-                if message.get('type') == 'new_game_response':
-                    player_id = client.get('game_id', client['id'])
-                    responses[player_id] = message.get('answer', False)
-                    print(f"✅ Jugador {player_id} respondió: {responses[player_id]}")
-                else:
-                    responses[client.get('game_id', client['id'])] = False
-            else:
-                responses[client.get('game_id', client['id'])] = False
+            while True:
+                data = client['socket'].recv(1024)
+                if not data:
+                    break
+                    
+                buffer += data.decode('utf-8')
+                
+                # Buscar mensaje completo
+                if '\n' in buffer:
+                    message_str, buffer = buffer.split('\n', 1)
+                    
+                    try:
+                        message = json.loads(message_str.strip())
+                        if message.get('type') == 'new_game_response':
+                            player_id = client.get('game_id', client['id'])
+                            responses[player_id] = message.get('answer', False)
+                            print(f"✅ Jugador {player_id} respondió: {responses[player_id]}")
+                            return
+                    except json.JSONDecodeError:
+                        continue
                 
         except Exception as e:
             print(f"❌ Error obteniendo respuesta de {client['address']}: {e}")
-            responses[client.get('game_id', client['id'])] = False
+            
+        responses[client.get('game_id', client['id'])] = False
     
     def process_new_game_responses(self, game, responses):
         print(f"📊 Respuestas recibidas: {responses}")
@@ -564,7 +587,8 @@ class WordleServer:
     
     def send_message(self, client_socket, message):
         try:
-            data = json.dumps(message).encode('utf-8')
+            # Agregar delimitador newline para separar mensajes
+            data = json.dumps(message).encode('utf-8') + b'\n'
             client_socket.send(data)
             return True
         except Exception as e:
